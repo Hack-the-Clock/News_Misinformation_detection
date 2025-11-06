@@ -1,0 +1,22 @@
+# Core dependencies
+openai>=1.0.0
+python-dotenv>=1.0.0
+
+# Graph and GNN libraries
+networkx>=3.1
+torch>=2.0.0
+torch-geometric>=2.3.0
+pyvis>=0.3.2
+
+# NLP and utilities
+spacy>=3.7.0
+dateparser>=1.1.8
+matplotlib>=3.7.0
+numpy>=1.24.0
+pandas>=2.0.0
+
+# Visualization
+plotly>=5.14.0
+
+# Optional: Neo4j (for future migration)
+# neo4j>=5.14.0

@@ -1,0 +1,29 @@
+# Environment
+.env
+venv/
+env/
+*.pyc
+__pycache__/
+
+# IDE
+.vscode/
+.idea/
+
+# Data
+data/
+*.db
+*.sqlite
+
+# Outputs
+outputs/
+graphs/
+*.html
+*.png
+
+# Models
+models/
+checkpoints/
+
+# Logs
+logs/
+*.log
