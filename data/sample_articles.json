@@ -1,0 +1,66 @@
+[
+    {
+        "id": 1,
+        "title": "COVID Cases Contradiction Example",
+        "text": "City X reported zero COVID cases yesterday. The same source confirmed a rise in cases earlier that day.",
+        "reference_date": "2024-01-15T14:00:00",
+        "expected_contradictions": 1,
+        "notes": "Classic temporal + semantic contradiction"
+    },
+    {
+        "id": 2,
+        "title": "Political Statement Contradiction",
+        "text": "The mayor denied any involvement in the scandal on Monday. However, the same mayor admitted to being aware of the issue in a statement released Sunday evening.",
+        "reference_date": "2024-01-16T10:00:00",
+        "expected_contradictions": 1,
+        "notes": "Source consistency violation - same person contradicting themselves"
+    },
+    {
+        "id": 3,
+        "title": "Economic Report Contradiction",
+        "text": "The quarterly report showed a 10% decline in revenue. The CEO announced record-breaking profits for the same quarter during the earnings call.",
+        "reference_date": "2024-01-20T15:00:00",
+        "expected_contradictions": 1,
+        "notes": "Mutually exclusive statements about same time period"
+    },
+    {
+        "id": 4,
+        "title": "Weather Report (No Contradiction)",
+        "text": "Weather forecast predicts rain for tomorrow. Today has been sunny and warm.",
+        "reference_date": "2024-01-18T12:00:00",
+        "expected_contradictions": 0,
+        "notes": "Different time periods, no contradiction"
+    },
+    {
+        "id": 5,
+        "title": "Event Ordering Violation",
+        "text": "The company announced bankruptcy yesterday. Last week, they completed a successful merger that doubled their market value.",
+        "reference_date": "2024-01-25T09:00:00",
+        "expected_contradictions": 1,
+        "notes": "Temporal inconsistency - how can bankruptcy follow a successful merger so quickly?"
+    },
+    {
+        "id": 6,
+        "title": "Multiple Sources (Consistent)",
+        "text": "Source A reported that the event started at 3 PM. Source B independently confirmed that the event began at 3 PM.",
+        "reference_date": "2024-01-22T16:00:00",
+        "expected_contradictions": 0,
+        "notes": "Multiple sources agreeing - no contradiction"
+    },
+    {
+        "id": 7,
+        "title": "Health Statistics Contradiction",
+        "text": "The hospital announced zero patient admissions today. Emergency room staff reported being overwhelmed with patients throughout the day.",
+        "reference_date": "2024-01-30T20:00:00",
+        "expected_contradictions": 1,
+        "notes": "Direct contradiction about same day events"
+    },
+    {
+        "id": 8,
+        "title": "Complex Multi-Event Timeline",
+        "text": "The project was completed in January 2024. The team started working on it in March 2024. Initial planning happened in February 2024.",
+        "reference_date": "2024-04-01T10:00:00",
+        "expected_contradictions": 1,
+        "notes": "Impossible timeline - completion before start"
+    }
+]
