@@ -122,6 +122,25 @@ class DatasetLoader:
         return pyg_data
 
 
+class LLMLogDatasetLoader:
+    """
+    Loads LLM log graph data with FEVER labels for supervised training
+    """
+    def __init__(self, max_datapoints=100):
+        from src.data.mock_fever_dataset import MockFEVERDataset
+        self.mock_dataset = MockFEVERDataset(max_datapoints=max_datapoints)
+        self.max_datapoints = max_datapoints
+
+    def load_training_data(self):
+        """
+        Loads up to max_datapoints graph samples from LLM log with FEVER labels
+        Returns:
+            List of PyTorch Geometric Data objects with labels
+        """
+        graph_data_list = self.mock_dataset.get_graph_data_list()
+        return graph_data_list
+
+
 def train_gnn_model(
     train_samples=1000,
     val_samples=200,
@@ -252,18 +271,21 @@ def train_gnn_model(
             optimizer.zero_grad()
 
             out = model(batch)
-            loss = F.nll_loss(out, batch.y.squeeze())
-
+            # Filter out any samples with y < 0 in the batch
+            valid_mask = (batch.y.squeeze() >= 0)
+            if valid_mask.sum() == 0:
+                continue  # skip batch if no valid targets
+            out_valid = out[valid_mask]
+            y_valid = batch.y.squeeze()[valid_mask]
+            loss = F.nll_loss(out_valid, y_valid)
             loss.backward()
             optimizer.step()
-
             train_loss += loss.item()
-            pred = out.argmax(dim=1)
-            train_correct += (pred == batch.y.squeeze()).sum().item()
-            train_total += batch.y.size(0)
-            
+            pred = out_valid.argmax(dim=1)
+            train_correct += (pred == y_valid).sum().item()
+            train_total += y_valid.size(0)
             all_train_preds.extend(pred.cpu().numpy())
-            all_train_labels.extend(batch.y.squeeze().cpu().numpy())
+            all_train_labels.extend(y_valid.cpu().numpy())
 
         train_acc = train_correct / train_total if train_total > 0 else 0.0
         avg_train_loss = train_loss / len(train_loader) if len(train_loader) > 0 else 0.0
@@ -401,7 +423,9 @@ def integrate_gnn_with_demo():
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description='Train GNN model with FEVER dataset')
+    parser = argparse.ArgumentParser(description='Train GNN model with FEVER or LLM log dataset')
+    parser.add_argument('--use_llm_log', action='store_true', help='Train using LLM log data instead of FEVER')
+    parser.add_argument('--llm_log_limit', type=int, default=100, help='Number of LLM log datapoints to use (default: 100)')
     parser.add_argument('--train_samples', type=int, default=1000,
                         help='Number of training examples (default: 1000)')
     parser.add_argument('--val_samples', type=int, default=200,
@@ -422,6 +446,116 @@ if __name__ == "__main__":
     print("║       GNN Training with FEVER Dataset                     ║")
     print("╚═══════════════════════════════════════════════════════════╝")
     print()
+
+    if args.use_llm_log:
+        print(f"📂 Step 1: Loading LLM Log Graph Dataset (limit: {args.llm_log_limit})...")
+        dataset_loader = LLMLogDatasetLoader(max_datapoints=args.llm_log_limit)
+        training_data = dataset_loader.load_training_data()
+        val_data = []  # No validation split for LLM log (unsupervised)
+        # Train model directly on LLM log data
+        train_loader = DataLoader(training_data, batch_size=args.batch_size, shuffle=True)
+        val_loader = DataLoader(val_data, batch_size=args.batch_size)
+        print(f"✓ Loaded {len(training_data)} training samples from LLM log")
+        print()
+        # Initialize model
+        print("🏗️  Step 2: Initializing GNN Model...")
+        model = FactVerificationGNN(
+            input_dim=32,
+            hidden_dim=64,
+            output_dim=2,  # Binary: contradiction or not
+            num_layers=2,
+            dropout=0.1,
+            use_attention=True
+        )
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+        print("✓ Model initialized")
+        print(f"  Parameters: {sum(p.numel() for p in model.parameters()):,}")
+        print(f"  Training samples: {len(training_data)}")
+        print(f"  Batch size: {args.batch_size}")
+        print(f"  Learning rate: {args.lr}")
+        print()
+        # Training loop (skip validation)
+        print("🚀 Step 3: Training...")
+        best_train_acc = 0.0
+        train_losses = []
+        start_time = time.time()
+        for epoch in range(args.epochs):
+            model.train()
+            train_loss = 0
+            train_correct = 0
+            train_total = 0
+            all_train_preds = []
+            all_train_labels = []
+            for batch in train_loader:
+                optimizer.zero_grad()
+                out = model(batch)
+                # Filter out any samples with y < 0 in the batch
+                valid_mask = (batch.y.squeeze() >= 0)
+                if valid_mask.sum() == 0:
+                    continue  # skip batch if no valid targets
+                out_valid = out[valid_mask]
+                y_valid = batch.y.squeeze()[valid_mask]
+                loss = F.nll_loss(out_valid, y_valid)
+                loss.backward()
+                optimizer.step()
+                train_loss += loss.item()
+                pred = out_valid.argmax(dim=1)
+                train_correct += (pred == y_valid).sum().item()
+                train_total += y_valid.size(0)
+                all_train_preds.extend(pred.cpu().numpy())
+                all_train_labels.extend(y_valid.cpu().numpy())
+            train_acc = train_correct / train_total if train_total > 0 else 0.0
+            avg_train_loss = train_loss / len(train_loader) if len(train_loader) > 0 else 0.0
+            train_losses.append(avg_train_loss)
+            if train_acc > best_train_acc:
+                best_train_acc = train_acc
+                torch.save(model.state_dict(), 'models/gnn_llmlog.pth')
+            if (epoch + 1) % 5 == 0 or epoch == 0:
+                print(f"Epoch {epoch+1}/{args.epochs}")
+                print(f"  Train Loss: {avg_train_loss:.4f} | Train Acc: {train_acc:.4f}")
+                print(f"  Best Train Acc: {best_train_acc:.4f}")
+                print()
+        elapsed_time = time.time() - start_time
+        print("=" * 80)
+        print("✅ Training Complete!")
+        print("=" * 80)
+        print(f"   Best Training Accuracy: {best_train_acc:.4f}")
+        print(f"   Total Training Time: {elapsed_time/60:.2f} minutes")
+        print(f"   Model saved to: models/gnn_llmlog.pth")
+        print()
+        print("📊 Training Summary:")
+        print(f"   - Training samples: {len(training_data)}")
+        print(f"   - Epochs trained: {epoch+1}")
+        print(f"   - Final train accuracy: {train_acc:.4f}")
+        print()
+        exit(0)
+
+    if args.use_llm_log:
+        print(f"📂 Step 1: Loading LLM Log Graph Dataset (limit: {args.llm_log_limit})...")
+        dataset_loader = LLMLogDatasetLoader(max_datapoints=args.llm_log_limit)
+        training_data = dataset_loader.load_training_data()
+        val_data = []  # No validation split for LLM log (unsupervised)
+        # Proceed directly to model training, skip FEVER loading and LLM extraction
+    else:
+        print("📂 Step 1: Loading FEVER Training Dataset...")
+        dataset_loader = DatasetLoader()
+        training_data = dataset_loader.load_training_data(
+            n_samples=args.train_samples,
+            split='train'
+        )
+        print("📂 Step 2: Loading FEVER Validation Dataset...")
+        try:
+            val_data = dataset_loader.load_training_data(
+                n_samples=args.val_samples,
+                split='validation'
+            )
+        except Exception as e:
+            print(f"⚠️  Warning: Could not load validation set: {e}")
+            print("   Using train/val split from training data...")
+            # Fallback: split training data
+            split_idx = int(0.8 * len(training_data))
+            val_data = training_data[split_idx:]
+            training_data = training_data[:split_idx]
 
     # Train model
     train_gnn_model(

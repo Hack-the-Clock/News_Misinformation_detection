@@ -80,6 +80,49 @@ def main():
     print(f"✓ Graph built with {stats['num_nodes']} nodes and {stats['num_edges']} edges")
     print()
 
+    # Step 3.5: GNN Analysis (if model exists)
+    import os
+    import torch
+    gnn_prediction = None
+    gnn_confidence = None
+
+    if os.path.exists('models/gnn_llmlog.pth'):
+        print("🤖 Step 3.5: Running GNN Analysis...")
+        try:
+            from src.gnn.gnn_model import FactVerificationGNN
+            from src.gnn.graph_embeddings import GraphEmbedding
+
+            # Load trained model
+            model = FactVerificationGNN(
+                input_dim=32,
+                hidden_dim=64,
+                output_dim=2,
+                num_layers=2,
+                dropout=0.1,
+                use_attention=True
+            )
+            model.load_state_dict(torch.load('models/gnn_llmlog.pth'))
+            model.eval()
+
+            # Convert graph to PyG format
+            embedding = GraphEmbedding(feature_dim=32)
+            pyg_data = embedding.networkx_to_pyg(knowledge_graph.graph)
+
+            # Get GNN predictions
+            with torch.no_grad():
+                out = model(pyg_data)
+                probabilities = torch.exp(out)
+                gnn_prediction = out.argmax(dim=1).item()
+                gnn_confidence = probabilities[0][gnn_prediction].item()
+
+            prediction_label = "REFUTES" if gnn_prediction == 1 else "SUPPORTS"
+            print(f"✓ GNN Prediction: {prediction_label}")
+            print(f"  Confidence: {gnn_confidence:.2%}")
+            print()
+        except Exception as e:
+            print(f"⚠️  GNN analysis failed: {e}")
+            print()
+
     # Step 4: Apply symbolic logic rules
     print("🧠 Step 4: Applying Symbolic Logic Rules...")
     detector = ContradictionDetector()
@@ -163,6 +206,8 @@ def main():
     print("🎯 Neurosymbolic AI Features Demonstrated:")
     print("  ✓ LLM-based entity and temporal extraction")
     print("  ✓ Temporal knowledge graph construction")
+    if gnn_prediction is not None:
+        print(f"  ✓ GNN-based fact verification (Prediction: {'REFUTES' if gnn_prediction == 1 else 'SUPPORTS'}, Confidence: {gnn_confidence:.2%})")
     print("  ✓ Symbolic logic rules for contradiction detection")
     print("  ✓ Narrative correction with LLM")
     print("  ✓ Interactive visualization")

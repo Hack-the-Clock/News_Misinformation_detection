@@ -5,7 +5,9 @@
       "Bash(source venv/bin/activate)",
       "Bash(pip install:*)",
       "Bash(python demo.py:*)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(python:*)",
+      "Bash(rm:*)"
     ],
     "deny": [],
     "ask": []
