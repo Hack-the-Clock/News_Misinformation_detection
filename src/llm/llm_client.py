@@ -1,6 +1,8 @@
 """OpenAI LLM client for structured extraction and generation"""
 
 import json
+import os
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 from openai import OpenAI
 
@@ -21,6 +23,22 @@ class LLMClient:
         self.api_key = api_key or Config.OPENAI_API_KEY
         self.model = model or Config.OPENAI_MODEL
         self.client = OpenAI(api_key=self.api_key)
+
+    def _log_llm_call(self, method: str, payload: dict, response: dict):
+        """
+        Save LLM call details to a log file for tracing and future use.
+        """
+        log_dir = "logs"
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, "llm_calls.log")
+        log_entry = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "method": method,
+            "payload": payload,
+            "response": response
+        }
+        with open(log_file, "a") as f:
+            f.write(json.dumps(log_entry) + "\n")
 
     def extract_structured_data(
         self,
@@ -58,14 +76,21 @@ class LLMClient:
             )
 
             content = response.choices[0].message.content
-
-            if response_format == "json":
-                return json.loads(content)
-            else:
-                return {"text": content}
+            result = json.loads(content) if response_format == "json" else {"text": content}
+            self._log_llm_call(
+                method="extract_structured_data",
+                payload={"text": text, "system_prompt": system_prompt, "response_format": response_format, "temperature": temperature},
+                response=result
+            )
+            return result
 
         except Exception as e:
             print(f"Error calling OpenAI API: {e}")
+            self._log_llm_call(
+                method="extract_structured_data",
+                payload={"text": text, "system_prompt": system_prompt, "response_format": response_format, "temperature": temperature},
+                response={"error": str(e)}
+            )
             return {}
 
     def generate_text(
@@ -100,10 +125,21 @@ class LLMClient:
                 temperature=temperature
             )
 
-            return response.choices[0].message.content
+            result = response.choices[0].message.content
+            self._log_llm_call(
+                method="generate_text",
+                payload={"prompt": prompt, "system_prompt": system_prompt, "temperature": temperature},
+                response={"text": result}
+            )
+            return result
 
         except Exception as e:
             print(f"Error calling OpenAI API: {e}")
+            self._log_llm_call(
+                method="generate_text",
+                payload={"prompt": prompt, "system_prompt": system_prompt, "temperature": temperature},
+                response={"error": str(e)}
+            )
             return ""
 
     def batch_extract(
@@ -126,5 +162,6 @@ class LLMClient:
         results = []
         for text in texts:
             result = self.extract_structured_data(text, system_prompt, response_format)
+            # Each extract_structured_data call is already logged
             results.append(result)
         return results

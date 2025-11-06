@@ -59,20 +59,31 @@ class FactVerificationGNN(nn.Module):
             for _ in range(num_layers)
         ])
 
-        # Output layers
+        # Graph-level pooling for classification
+        self.pool = global_mean_pool
+
+        # Output layers (for graph-level classification)
         self.fc1 = nn.Linear(final_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, output_dim)
 
-    def forward(self, data: Data):
+    def forward(self, data: Data, batch=None):
         """
         Forward pass
 
         Args:
-            data: PyTorch Geometric Data object
+            data: PyTorch Geometric Data object or Batch
+            batch: Batch tensor for graph-level classification (if None, uses node-level)
 
         Returns:
-            Node-level predictions
+            Node-level or graph-level predictions
         """
+        # Handle both single graph and batched graphs
+        if hasattr(data, 'batch') and data.batch is not None:
+            batch = data.batch
+        elif batch is None:
+            # Single graph - create batch tensor
+            batch = torch.zeros(data.x.size(0), dtype=torch.long, device=data.x.device)
+
         x, edge_index = data.x, data.edge_index
 
         # Graph convolution layers
@@ -82,7 +93,16 @@ class FactVerificationGNN(nn.Module):
             x = F.relu(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
 
-        # Output layers
+        # For graph-level classification, pool node features first
+        # Then apply classification layers
+        if batch is not None:
+            # Pool nodes to get graph-level representation
+            x = self.pool(x, batch)
+        else:
+            # Single graph - pool all nodes
+            x = x.mean(dim=0, keepdim=True)
+
+        # Output layers (now operating on graph-level features)
         x = self.fc1(x)
         x = F.relu(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
